@@ -1,0 +1,28 @@
+name: Sync Jetson Image to Aliyun
+
+on:
+  workflow_dispatch: # 这个配置允许你在 GitHub 网页端手动点击运行，非常适合搬运镜像
+
+jobs:
+  sync-image:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Login to Aliyun Container Registry
+        uses: docker/login-action@v3
+        with:
+          # 注意：GitHub Actions 在海外，必须使用公网地址，不能用 vpc 地址
+          registry: crpi-begzeiaps9flzbll.cn-hangzhou.personal.cr.aliyuncs.com
+          username: ${{ secrets.ALIYUN_USERNAME }}
+          password: ${{ secrets.ALIYUN_PASSWORD }}
+
+      - name: Pull, Tag, and Push Image
+        run: |
+          # 1. 从海外源 (ghcr.io) 极速拉取原始镜像
+          docker pull ghcr.io/nvidia-ai-iot/llama_cpp:gemma4-jetson-orin
+          
+          # 2. 给镜像重新打上你的阿里云仓库标签
+          docker tag ghcr.io/nvidia-ai-iot/llama_cpp:gemma4-jetson-orin crpi-begzeiaps9flzbll.cn-hangzhou.personal.cr.aliyuncs.com/kabam/wuxi:gemma4-jetson-orin
+          
+          # 3. 将打好标签的镜像推送到阿里云
+          docker push crpi-begzeiaps9flzbll.cn-hangzhou.personal.cr.aliyuncs.com/kabam/wuxi:gemma4-jetson-orin
