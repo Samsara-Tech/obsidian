@@ -1,4 +1,4 @@
-name: Export Image to Release
+name: Export Jetson Image to Release
 
 on:
   workflow_dispatch:
@@ -8,12 +8,16 @@ on:
         required: true
         default: 'v1.0.0'
 
+# 核心修复：赋予 Workflow 创建 Release 和上传文件的写入权限
+permissions:
+  contents: write
+
 jobs:
   export-and-release:
     runs-on: ubuntu-latest
     
     steps:
-      # 1. 释放 GitHub Runner 磁盘空间 (Jetson 镜像极大，这一步必不可少)
+      # 1. 释放 GitHub Runner 磁盘空间 (针对庞大的 AI/CUDA 镜像必不可少)
       - name: Free Disk Space
         uses: jlumbroso/free-disk-space@main
         with:
@@ -22,25 +26,37 @@ jobs:
           dotnet: true
           haskell: true
           large-packages: true
+          docker-images: false # 保留 docker 环境，因为马上要用
           swap-storage: true
 
+      # 2. 检出代码
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 2. 拉取、导出并多线程压缩镜像
+      # 3. 安装多线程压缩工具 pigz
+      - name: Install pigz
+        run: sudo apt-get update && sudo apt-get install -y pigz
+
+      # 4. 拉取、导出并极速压缩镜像
       - name: Pull and Save Image
         run: |
+          echo "开始拉取镜像..."
           docker pull ghcr.io/nvidia-ai-iot/llama_cpp:gemma4-jetson-orin
-          # 使用 pigz 进行多线程极限压缩，速度比普通 gzip 快得多
-          sudo apt-get install -y pigz
+          
+          echo "拉取完成，开始多线程压缩..."
+          # 使用 pigz 将导出的镜像流极速压缩，节省打包时间
           docker save ghcr.io/nvidia-ai-iot/llama_cpp:gemma4-jetson-orin | pigz > jetson_image.tar.gz
 
-      # 3. 将压缩包切分为 1.5GB 的分卷 (绕过 GitHub Release 2GB 限制)
+      # 5. 切分压缩包 (绕过 GitHub Release 单文件 2GB 的严格限制)
       - name: Split Archive
         run: |
+          echo "开始切片压缩包为 1500MB 的分卷..."
           split -b 1500M jetson_image.tar.gz "jetson_image.tar.gz.part_"
+          
+          echo "切片完成，生成的分卷列表如下："
+          ls -lh jetson_image.tar.gz.part_*
 
-      # 4. 创建 Release 并上传所有分片文件
+      # 6. 创建 Release 并上传所有分片文件
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
         with:
