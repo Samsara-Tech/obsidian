@@ -1,0 +1,31 @@
+name: Tailscale Exit Node Runner
+
+on:
+  workflow_dispatch: # 允许你在 Actions 页面手动点击运行
+
+jobs:
+  start-proxy:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. 开启 IP 转发 (作为 Tailscale Exit Node 的必须步骤)
+      - name: Enable IP Forwarding
+        run: |
+          echo 'net.ipv4.ip_forward = 1' | sudo tee -a /etc/sysctl.d/99-tailscale.conf
+          echo 'net.ipv6.conf.all.forwarding = 1' | sudo tee -a /etc/sysctl.d/99-tailscale.conf
+          sudo sysctl -p /etc/sysctl.d/99-tailscale.conf
+
+      # 2. 运行你提供的安装和启动命令 (使用 Secrets 保护 Auth Key)
+      - name: Install and Start Tailscale
+        env:
+          # 从 GitHub Secrets 中读取你的 Auth Key
+          TS_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
+        run: |
+          curl -fsSL https://tailscale.com/install.sh | sh
+          sudo tailscale up --auth-key=${TS_AUTH_KEY} --advertise-exit-node
+
+      # 3. 挂起 Action 保持运行 (非常重要)
+      - name: Keep Action Alive
+        run: |
+          echo "Tailscale Exit Node is running. Action will stay alive for 6 hours."
+          # 挂起进程，直到到达 GitHub Action 单次任务 6 小时的强制超时上限
+          sleep 6h
